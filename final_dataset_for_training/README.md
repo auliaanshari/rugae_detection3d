@@ -1,7 +1,7 @@
 struktur directory :
 
-* folder dataset > subfolder dataset (langsung ke identitas data, tidak didahului folder lain)
-* struktur dataset lihat pada bagian dataset
+* folder final dataset berisi file hasil preprocessing
+* struktur dataset lihat pada bagian dibawah ini
 
 
 

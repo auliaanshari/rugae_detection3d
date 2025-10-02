@@ -1,7 +1,9 @@
 struktur directory :
 
-* folder dataset > subfolder dataset (langsung ke identitas data, tidak didahului folder lain)
-* struktur dataset lihat pada bagian dataset
+* folder anotated\_dataset > subfolder dataset (langsung ke identitas data, tidak didahului folder lain)
+* struktur dataset lihat pada bagian dibawah
+
+
 
 
 
@@ -29,5 +31,5 @@ struktur directory :
 |-- 📂 val/
 |   |-- ...\_final.npz
 |-- 📂 test/
-|-- ...\_final.npz
+    |-- ...\_final.npz
 
