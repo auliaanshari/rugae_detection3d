@@ -7,7 +7,7 @@ import random
 # --- KONFIGURASI ---
 INPUT_DIR_ANNOTATED = "annotated_dataset"
 OUTPUT_DIR_FINAL = "final_dataset_for_training"
-TARGET_POINTS = 40000  # Jumlah titik final yang diinginkan
+TARGET_POINTS = 40000  # Jumlah titik final yang diinginkan ( ubah ini untuk menaikan sampling)
 
 # Konfigurasi Pemisahan Dataset
 TRAIN_SPLIT = 0.8  # 80% untuk data training
@@ -17,39 +17,38 @@ VALIDATION_SPLIT = 0.1 # 10% untuk data validasi
 
 def normalize_with_landmarks(mesh, landmarks):
     """
-    Melakukan normalisasi pose (translasi & rotasi) pada mesh
-    berdasarkan 3 titik landmark anatomis.
+    VERSI FINAL YANG BEKERJA:
+    Menggunakan 2 landmark (Depan & Belakang) dan referensi dunia untuk hasil lurus.
     """
-    # Titik A (Papilla Insisivus) akan menjadi origin baru
+    # Ambil hanya Landmark A (Depan) dan B (Belakang)
     p_a = landmarks[0]
-    # Titik B (Posterior Raphe)
     p_b = landmarks[1]
-    # Titik C (Midpoint Raphe)
-    p_c = landmarks[2]
-
-    # --- 1. Translasi ---
-    # Pindahkan mesh sehingga Papilla Insisivus (Titik A) berada di (0,0,0)
+    
+    # --- TAHAP 1: TRANSLASI ---
     mesh.translate(-p_a, relative=False)
+    p_b_t = p_b - p_a
 
-    # --- 2. Rotasi ---
-    # Definisikan sistem koordinat anatomis yang baru
-    # Sumbu Y baru adalah vektor dari A ke B (garis tengah palatum)
-    new_y_axis = (p_b - p_a) / np.linalg.norm(p_b - p_a)
+    # --- TAHAP 2: ROTASI ---
+    # 2a. Tentukan Sumbu Y Anatomis (Arah Belakang)
+    y_axis_anatomis = p_b_t / np.linalg.norm(p_b_t)
     
-    # Sumbu Z baru tegak lurus terhadap bidang yang dibentuk oleh A, B, dan C
-    vec_ac = p_c - p_a
-    new_z_axis = np.cross(new_y_axis, vec_ac)
-    new_z_axis /= np.linalg.norm(new_z_axis)
-    
-    # Sumbu X baru tegak lurus terhadap Y dan Z
-    new_x_axis = np.cross(new_y_axis, new_z_axis)
+    # 2b. Tentukan Sumbu X Anatomis (Arah Kanan)
+    world_z_ref = np.array([0, 0, 1])
+    x_axis_anatomis = np.cross(y_axis_anatomis, world_z_ref)
+    x_axis_anatomis /= np.linalg.norm(x_axis_anatomis)
 
-    # Buat matriks rotasi untuk menyelaraskan sumbu baru dengan sumbu dunia (X,Y,Z)
-    # Ini adalah invers (transpose) dari matriks yang dibentuk oleh sumbu2 baru
-    rotation_matrix = np.array([new_x_axis, new_y_axis, new_z_axis])
+    # 2c. Tentukan Sumbu Z Anatomis (Arah Atas)
+    z_axis_anatomis = np.cross(x_axis_anatomis, y_axis_anatomis)
     
-    # Terapkan rotasi
-    mesh.rotate(rotation_matrix.T, center=(0,0,0))
+    # 2d. Susun Matriks Rotasi
+    rotation_matrix = np.array([x_axis_anatomis, y_axis_anatomis, z_axis_anatomis])
+
+    # 2e. Terapkan Rotasi
+    mesh.rotate(rotation_matrix, center=(0,0,0))
+    
+    # --- TAHAP 3: FINALISASI VISUAL ---
+    mesh.orient_triangles()
+    mesh.compute_vertex_normals()
     
     return mesh
 
@@ -60,26 +59,26 @@ def process_final_file(annotated_path, landmark_path, output_path_npz):
     VERSI BARU: Membaca langsung sebagai Point Cloud untuk keandalan pembacaan label.
     """
     try:
-        # 1. Memuat langsung sebagai Point Cloud, bukan Triangle Mesh
-        pcd_annotated = o3d.io.read_point_cloud(annotated_path)
+        # 1. Memuat langsung sebagai Triangle Mesh
+        mesh_annotated = o3d.io.read_triangle_mesh(annotated_path)
         
         # 2. Memuat titik landmark
         landmarks = np.loadtxt(landmark_path, delimiter=',')
         
         # 3. Validasi file yang dimuat
-        if not pcd_annotated.has_points() or not pcd_annotated.has_colors():
+        if not mesh_annotated.has_vertices() or not mesh_annotated.has_vertex_colors():
             print(f"  -> KRITIS: File tidak memiliki titik atau informasi warna (label). Cek ulang file dari CloudCompare.")
             return
 
-        print(f"  -> Poin anotasi padat: {len(pcd_annotated.points)}")
+        print(f"  -> Poin anotasi padat: {len(mesh_annotated.vertices)}")
         
         # 4. Normalisasi Presisi menggunakan Landmark (fungsi ini bekerja untuk mesh & point cloud)
-        pcd_normalized = normalize_with_landmarks(pcd_annotated, landmarks)
-        
+        mesh_normalized = normalize_with_landmarks(mesh_annotated, landmarks)
+
         # 5. Ekstrak vertices dan label (sekarang dari .points dan .colors)
-        points = np.asarray(pcd_normalized.points)
-        labels = np.asarray(pcd_normalized.colors)[:, 0] # Ambil channel Merah (Red)
-        
+        points = np.asarray(mesh_normalized.vertices)
+        labels = np.asarray(mesh_normalized.vertex_colors)[:, 0] # Ambil channel Merah (Red)
+
         # Konversi float [0,1] ke integer label.
         labels_int = np.rint(labels * 255).astype(np.uint8)
 
@@ -130,10 +129,7 @@ def main():
     # Logika untuk membagi dataset
     train_count = int(len(all_patient_folders) * TRAIN_SPLIT)
     val_count = int(len(all_patient_folders) * VALIDATION_SPLIT)
-    
-    train_patients = all_patient_folders[:train_count]
-    val_patients = all_patient_folders[train_count : train_count + val_count]
-    test_patients = all_patient_folders[train_count + val_count:]
+    train_patients, val_patients, test_patients = np.split(np.array(all_patient_folders), [train_count, train_count + val_count])
     
     patient_splits = {
         "train": train_patients,
@@ -152,6 +148,10 @@ def main():
             input_folder_path = os.path.join(INPUT_DIR_ANNOTATED, folder_name)
             print(f"Memproses pasien: {folder_name}")
 
+            # Buat subfolder untuk pasien di dalam folder train/val/test
+            output_patient_folder = os.path.join(output_subset_path, folder_name)
+            os.makedirs(output_patient_folder, exist_ok=True)
+
             # Cari file mesh anotasi dan landmark
             annotated_file = glob.glob(os.path.join(input_folder_path, "*_annotated.ply"))
             landmark_file = glob.glob(os.path.join(input_folder_path, "*_landmarks.txt"))
@@ -161,7 +161,7 @@ def main():
                 continue
             
             output_file_name = f"{folder_name}_final.npz"
-            output_file_path = os.path.join(output_subset_path, output_file_name)
+            output_file_path = os.path.join(output_patient_folder, output_file_name)
             
             process_final_file(annotated_file[0], landmark_file[0], output_file_path)
 

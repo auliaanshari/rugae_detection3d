@@ -22,10 +22,16 @@ class RugaeDataset(Dataset):
         if not os.path.isdir(self.split_dir):
             raise FileNotFoundError(f"Direktori untuk split '{self.split}' tidak ditemukan di: {self.split_dir}")
             
-        self.file_paths = sorted(glob.glob(os.path.join(self.split_dir, "*.npz")))
+        self.file_paths = sorted(glob.glob(os.path.join(self.split_dir, "**", "*.npz"), recursive=True))
         
         if len(self.file_paths) == 0:
             print(f"Peringatan: Tidak ada file .npz yang ditemukan di {self.split_dir}")
+        
+        # Membuat pemetaan dari ID pasien (string) ke indeks kelas (integer)
+        all_patient_ids = sorted(list(set([os.path.basename(os.path.dirname(p)) for p in self.file_paths])))
+        self.classes = all_patient_ids
+        self.class_to_idx = {class_name: i for i, class_name in enumerate(self.classes)}
+        self.idx_to_class = {i: class_name for i, class_name in enumerate(self.classes)}
 
     def __len__(self):
         """Mengembalikan jumlah total sampel di dataset."""
@@ -40,27 +46,30 @@ class RugaeDataset(Dataset):
         data = np.load(file_path)
         
         points = data['points']
-        labels = data['labels']
+        segmentation_labels = data['labels']
         
         # Konversi array NumPy ke format PyTorch Tensor
         # .float() untuk koordinat, .long() untuk label kelas
         points = torch.from_numpy(points).float()
-        labels = torch.from_numpy(labels).long()
+        segmentation_labels = torch.from_numpy(segmentation_labels).long()
         
         # Ekstrak ID pasien dari nama file untuk digunakan nanti (di model recognition)
         # Contoh nama file: 'K01A (Bernado Barus)_final.npz' -> 'K01A (Bernado Barus)'
-        patient_id = os.path.basename(file_path).replace('_final.npz', '')
+        patient_id_str = os.path.basename(os.path.dirname(file_path))
+
+        # Ambil indeks kelas integer untuk ID pasien ini
+        class_idx = self.class_to_idx[patient_id_str]
         
         # Kembalikan data dalam bentuk dictionary
         sample = {
             'points': points, 
-            'labels': labels, 
-            'patient_id': patient_id
+            'segmentation_labels': segmentation_labels, 
+            'patient_id': patient_id_str,
+            'class_idx': torch.tensor(class_idx, dtype=torch.long)
         }
         
         return sample
 
-# --- BLOK UNTUK PENGUJIAN ---
 # Kode di bawah ini hanya akan berjalan jika Anda menjalankan 'python dataset.py'
 # secara langsung. Ini tidak akan berjalan saat Anda mengimpor class ini di file lain.
 if __name__ == '__main__':
@@ -71,21 +80,21 @@ if __name__ == '__main__':
         train_dataset = RugaeDataset(root_dir="final_dataset_for_training", split='train')
         
         print(f"Total sampel di dataset 'train': {len(train_dataset)}")
+
+        # Tampilkan pemetaan kelas yang dibuat
+        print(f"Jumlah kelas (pasien unik) ditemukan: {len(train_dataset.classes)}")
+        print("Pemetaan Kelas ke Indeks:")
+        print(train_dataset.class_to_idx)
         
         if len(train_dataset) > 0:
             # Ambil sampel pertama untuk diinspeksi
             first_sample = train_dataset[0]
             
-            points_tensor = first_sample['points']
-            labels_tensor = first_sample['labels']
-            patient_id = first_sample['patient_id']
-            
             print("\n--- Inspeksi Sampel Pertama ---")
-            print(f"ID Pasien: {patient_id}")
-            print(f"Bentuk (Shape) tensor 'points': {points_tensor.shape}")
-            print(f"Tipe data 'points': {points_tensor.dtype}")
-            print(f"Bentuk (Shape) tensor 'labels': {labels_tensor.shape}")
-            print(f"Tipe data 'labels': {labels_tensor.dtype}")
+            print(f"ID Pasien (string): {first_sample['patient_id']}")
+            print(f"Indeks Kelas (integer): {first_sample['class_idx'].item()}")
+            print(f"Bentuk 'points': {first_sample['points'].shape}")
+            print(f"Bentuk 'segmentation_labels': {first_sample['segmentation_labels'].shape}")
             print("-" * 20)
             
             # Cek apakah DataLoader bekerja
@@ -94,7 +103,7 @@ if __name__ == '__main__':
             first_batch = next(iter(train_loader))
             print("\n--- Inspeksi Batch Pertama dari DataLoader ---")
             print(f"Bentuk 'points' dalam satu batch: {first_batch['points'].shape}")
-            print(f"Bentuk 'labels' dalam satu batch: {first_batch['labels'].shape}")
+            print(f"Bentuk 'segmentation_labels' dalam satu batch: {first_batch['segmentation_labels'].shape}")
             print(f"ID Pasien dalam satu batch: {first_batch['patient_id']}")
             print("-" * 20)
 
