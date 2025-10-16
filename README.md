@@ -32,10 +32,10 @@ Pipeline ini akan membaca dan menghasilkan data dalam struktur folder berikut. P
 ```
 /proyek-rugae/ 
 | 
-|-- 📄 finalize_data.py 
+|-- 📄 preprocess_final.py 
 |-- 📄 augment_dataset.py 
 |-- 📄 train_triplet.py 
-|-- 📄 evaluate_final.py 
+|-- 📄 evaluate_final_simple.py 
 |-- 📄 predict_triplet.py 
 |-- 📄 dataset.py # (Modul pendukung) 
 |-- 📄 model_recognition.py # (Modul pendukung) 
