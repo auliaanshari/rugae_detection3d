@@ -63,7 +63,7 @@ Langkah ini mengubah data anotasi mentah (yang masih miring) menjadi dataset `.n
 * **Tujuan:** Menghasilkan dataset dasar dengan 1 sampel per pasien, sudah dalam posisi lurus dan siap untuk di-augmentasi.
 * **Perintah:**
     ```bash
-    python finalize_data.py
+    python preprocess_final.py
     ```
 * **Output:** Folder `final_dataset_for_training/` akan dibuat dan diisi dengan subfolder `train/`, `val/`, dan `test/`. Di dalamnya, setiap pasien akan memiliki subfolder sendiri yang berisi 1 file `.npz`.
 
@@ -99,7 +99,7 @@ Setelah model terlatih, kita bisa mengukur performanya pada `test set`.
 * **Tujuan:** Melakukan analisis kuantitatif dan kualitatif pada performa model.
 * **Perintah (Evaluasi Kuantitatif Lengkap):**
     ```bash
-    python evaluate_final.py
+    python evaluate_final_simple.py
     ```
     * **Output:** Skrip ini akan menghasilkan **angka Akurasi Verifikasi**, **EER**, dan gambar **Confusion Matrix** (`confusion_matrix.png`) serta **Kurva EER** (`eer_curve.png`) di dalam folder `evaluation_results/`.
 
